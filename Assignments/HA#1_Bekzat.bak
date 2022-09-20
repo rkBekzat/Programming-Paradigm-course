@@ -1,0 +1,108 @@
+#lang slideshow
+
+
+; EX 1.1
+
+(define (isletter? expr)
+  (or
+   (and (symbol<? 'a expr) (symbol<? expr 'z))
+   (or (symbol=? 'a expr) (symbol=? 'z expr))
+   )
+  )
+
+(define (variable? expr)
+  (and (symbol? expr) (isletter? expr))
+  )
+
+
+(define (sum? expr)
+  (and
+   (list? expr)
+   (symbol=? (first expr) '+)
+   )
+  )
+
+(define (summand-1 expr)
+  (cond
+    [(sum? expr)  (second expr)]
+    [else "this not sum"]
+  )
+  )
+
+(define (summand-2 expr)
+  (cond
+    [(sum? expr) (third expr)]
+    [else "this not sum"]
+   )
+  )
+
+(define (product? expr)
+  (and
+   (list? expr)
+   (symbol=? (first expr) '*)
+   )
+  )
+
+(define (multiplier-1 expr)
+  (cond
+    [(product? expr) (second expr)]
+    [else "this not multiplication"]
+    )
+  )
+
+(define (multiplier-2 expr)
+  (cond
+    [(product? expr) (third expr)]
+    [else "this not multiplication"]
+   )
+  )
+
+
+; ex1.2
+
+(define (multi expr var)
+  (cons
+   '+
+   (map
+    (lambda (take_derivative)
+      ( cons '* (map
+                 (lambda (parts)(cond[(eq? take_derivative parts) (derivative parts var)][else parts] ) )
+                 expr)
+             )
+      )
+    expr)
+  )
+)
+
+(define (derivative expr x)
+  (cond
+    [(sum? expr) (cons '+ (map (lambda(lst) (derivative lst x)) (rest expr)))]
+    [(product? expr)  (multi (rest expr) x) ]
+    [(eq? expr x) '1]
+    [else 0]
+   )
+  )
+
+;ex 1.3
+
+(define (number? expr)
+  (and (not (symbol? expr)) (not (list? expr)))
+  )
+
+(define (add expr1 expr2)
+  (cond
+    [(or (variable? expr1)(list? expr1)) (cons )]
+    [(or (variable? expr2)(list? expr2)) ]
+    [else (+ expr1 expr2)]
+   )
+  )
+
+(define (multiply expr1 expr2))
+
+(define (simplify expr)
+  (cond
+    [(sum? expr) (add (simplify (second expr)) (simplify (thrid expr))) ]
+    [(product? expr) (multiply (simplify (second expr)) (simplify (thrid expr)))]
+    [else expr]
+    )
+  )
