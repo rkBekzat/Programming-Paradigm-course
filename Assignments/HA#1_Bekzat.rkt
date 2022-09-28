@@ -109,9 +109,10 @@
 
 ; I just use the chain rule: (f(x)^constant)'= f(x)'*constant*(f(x)^(constant))
 ; as you can see here no some exception, because before calling this function I already checked the valid of expression 
-; expr = (^ f(x) constant) 
+; expr = f(x) ^ g(x) -> (f(x) ^ g(x))' = g(x)*f(x)^(g(x)-1)*f(x)' + f(x)^g(x)*ln(f(x))*g(x)'
 (define (exponent-derivative expr x)
-  (list '*
+  (list '+
+        (list '*
         (derivative (second expr) x) ; (f(x)')
         (list '*
           (third expr) ; constant
@@ -120,6 +121,17 @@
             (list '- (third expr) 1) ;constant-1
             )
          )
+        )
+        (list '*
+              (derivative (third expr) x)
+              (list '*
+                    (list 'ln (second expr))
+                    (list '^
+                          (second expr)
+                          (third expr)
+                          )
+                    )
+              )
   )
 )
 
@@ -127,17 +139,27 @@
 ; almost everywhere used chain rule in derivative
 (define (derivative expr x)
   (cond
-    ; In in first case expr = (log f(x)) -> (log f(x))' = (f(x)')/(ln(10)*f(x)) here again use chain rule
-    [(log? expr) (list '/ (derivative (second expr) x) (list  'ln '10 (second expr)))]
-    ;In second case expr = (sin f(x)) -> (sin f(x))' = f(x)'cos(f(x))
+    ; In in first case expr = (log f(x)) -> log(f(x))' = (f(x)')/(ln(10)*f(x)) here again use chain rule
+    [(log? expr) (list '/ (derivative (second expr) x) (list '* (list  'ln '10) (second expr)))]
+    
+    ;In second case expr = (sin f(x)) -> sin(f(x))' = f(x)'cos(f(x))
     [(sin? expr) (list '* (derivative (second expr) x) (list 'cos (second expr)))]
+
     [(exponent? expr) (exponent-derivative expr x)] ; just call another function
-    [(cos? expr) (list '* (derivative (second expr) x) '- (list 'sin (second expr)))] 
+    ; same as sin function ; expr = cos(f(x)) -> cos(f(x))' = f(x)'*-1*sin(f(x))
+
+    [(cos? expr) (list '* (derivative (second expr) x) '- (list 'sin (second expr)))]
+    ; just use formula; expr = tan(f(x)) ->  (tan(f(x)))' = f(x)'/cos(f(x))^2
+
     [(tan? expr) (list '/ (derivative (second expr) x) (list '^ (list 'cos (second expr)) '2))]
     ; here in addition we don't know number of element therefore I used map. Using map I take derivative in each elemnt and adding all of them  
+
     [(sum? expr) (cons '+ (map (lambda(lst) (derivative lst x)) (rest expr)))] 
+
     [(product? expr)  (multi (rest expr) x) ] ; just call another function
+
     [(eq? expr x) '1]; simple case when we have one variable x
+
     [else 0] ; in other case return 0
    )
   )
@@ -147,53 +169,72 @@
 ;ex 1.3
 
 
+(define (isZero? x)
+  (and (number? x) (= x 0))
+  )
+
+(define exist-variable
+  (lambda(x)(or (list? x) (variable? x)))
+  )
+
+
 ;all simplifys function are get expression which not contain not simplified sub exrpression
 ; which mean we haven't get this expression: (+ 4 (+ 6 5)), We get thie: (+ 4 11)
 ; as you can see all subexpression is simplified
 
 
+
 (define (add expr)
   (cond
-    [(empty? (filter notNumber? expr)) (foldl + 0 (filter number? expr))] ; check if varaibles doesn't exist then reutrn
+    ; first case when in our expression hasn't variables then whe just return some of the number
+    ; to determine presence of some variable, I use filter function where check if expression contain list or variables 
+    [(empty? (filter exist-variable expr)) (foldl + 0 (filter number? expr))]
+
+    ; second case when sum of number equal to zero or expression doesn't contain any numbers
+    ; then return list of variables 
     [(or (empty? (filter number? expr)) (= 0 (foldl + 0 (filter number? expr))))
      (cond
-       [(= 1 (length (filter notNumber? expr))) (filter notNumber? expr)]
-       [else (append (list '+) (filter notNumber? expr))]
+       ; also check if number of element equal to 1 then no need to write symbol '+'
+       ; otherwise we just add symbol '+' at beggining 
+       [(= 1 (length (filter exist-variable expr))) (filter exist-variable expr)]
+       [else (cons '+ (filter exist-variable expr))]
        ) ]
-    [else (list '+ (foldl + 0 (filter number? expr)) (filter notNumber? expr))]
+    ; last case we just combine two list
+    [else (append (list '+ (foldl + 0 (filter number? expr))) (filter exist-variable expr))]
  
    )
   )
 
-(define (isZero? x)
-  (and (number? x) (= x 0))
-  )
 
-(define (notNumber? x)
-  (not (number? x))
-  )
-
+; function to simplify multiplied expression 
 (define (multiply expr)
   (cond
+    ; first case if expression contain 0 then answer will be 0
     [(ormap isZero? expr) 0]
-    [(empty? (filter notNumber? expr)) (foldl * 1 (filter number? expr))]
+
+    ; this function same as add function 
+    [(empty? (filter exist-variable expr)) (foldl * 1 (filter number? expr))]
     [(or (empty? (filter number? expr)) (= 1 (foldl * 1 (filter number? expr))))
      (cond
-       [(= 1 (length (filter notNumber? expr))) (filter notNumber? expr)]
-       [else (append (list '*) (filter notNumber? expr))]
+       [(= 1 (length (filter exist-variable expr))) (filter exist-variable expr)]
+       [else (cons '* (filter exist-variable expr))]
        )]
-    [else (list '* (foldl * 1 (filter number? expr)) (filter notNumber? expr))]
+    [else  (append (list '* (foldl * 1 (filter number? expr))) (filter exist-variable expr))]
    
    ))
 
+;this function simplify the exponent
 (define (exponent_simpl num pow)
   (cond
-    [(and (number? pow) (= 0 pow)) 1]
-    [(and (number? num) (number? pow)) (* num (exponent_simpl num (- pow 1)))]
-    [else (list '^ num pow)]
+    [(and (number? pow) (= 0 pow)) 1] ; for all case if exponent is zero then answer always will be 1
+    [(and (number? num) (number? pow)) (* num (exponent_simpl num (- pow 1)))] ; second case if num and pow is numbers then call recursive function to calculate
+    [else (list '^ num pow)] ; otherwise return list 
     )
   )
 
+; function for tan, cos, sin, log almost same
+; check if the val variable is number or not; if yes then call function
+; otherwise return list 
 (define (log_simpl val)
   (cond
     [(number? val) (log val)]
@@ -226,7 +267,7 @@
 
 (define (div_simpl num denom)
   (cond
-    [(and (number? denom) (= 0 denom)) "FUCK"]
+    [(and (number? denom) (= 0 denom)) (error "Impossible to divide to the 0" )]
     [(and (number? num) (number? denom)) (/ num denom)]
     [else (list '/ num denom)]
     )
@@ -239,27 +280,26 @@
     )
   )
 
-(define (deleteBrackets expr)
+(define (rmv-bracket expr)
   (cond
-    [(and (list? expr) (= 1 (length expr))) (deleteBrackets (first expr))]
-    [else expr]
-   )
+    [(and (list? expr)(= 1 (length expr))) (rmv-bracket (first expr))]
+    [else expr])
   )
 
 ; function which simplify the expression, for every case we call other function
 (define (simplify expr)
   (cond
-    [(log? expr) (log_simpl (simplify (second expr)))]
-    [(sin? expr) (sin_simpl (simplify (second expr)))]
-    [(cos? expr) (cos_simpl (simplify (second expr)))]
-    [(tan? expr) (tan_simpl (simplify (second expr)))]
-    [(exponent? expr) (exponent_simpl (simplify (second expr)) (simplify (third expr)))]
-    [(div? expr) (div_simpl (simplify (second expr)) (simplify (third expr)))]
-    [(minus? expr) (minus_simpl (simplify (second expr)) (simplify (third expr)))]
+    [(log? expr) (rmv-bracket (log_simpl (simplify (second expr))))]
+    [(sin? expr) (rmv-bracket (sin_simpl (simplify (second expr))))]
+    [(cos? expr) (rmv-bracket (cos_simpl (simplify (second expr))))]
+    [(tan? expr) (rmv-bracket (tan_simpl (simplify (second expr))))]
+    [(exponent? expr) (rmv-bracket (exponent_simpl (simplify (second expr)) (simplify (third expr))))]
+    [(div? expr) (rmv-bracket (div_simpl (simplify (second expr)) (simplify (third expr))))]
+    [(minus? expr) (rmv-bracket (minus_simpl (simplify (second expr)) (simplify (third expr))))]
     ; in sum and product I use map, because number of elemtns in list unknowm and  I need put simplified expresion to another function.   
-    [(sum? expr)   (deleteBrackets (add (map (lambda (x) (deleteBrackets (simplify x))) (rest expr)))) ] 
-    [(product? expr) (deleteBrackets (multiply (map (lambda (x) (deleteBrackets (simplify x))) (rest expr))))]
-    [else expr]
+    [(sum? expr)   (rmv-bracket (add (map (lambda (x) (simplify x)) (rest expr)))) ] 
+    [(product? expr) (rmv-bracket (multiply (map (lambda (x)  (simplify x)) (rest expr))))]
+    [else (rmv-bracket expr)]
     )
   )
 
